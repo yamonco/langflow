@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from langflow.services.database.models import User
 from langflow.services.database.models.api_key import ApiKey, ApiKeyCreate, ApiKeyRead, UnmaskedApiKeyRead
-from langflow.services.deps import session_scope
+from langflow.services.deps import get_settings_service, session_scope
 
 if TYPE_CHECKING:
     from sqlmodel.sql.expression import SelectOfScalar
@@ -58,9 +58,11 @@ async def check_key(session: AsyncSession, api_key: str) -> User | None:
     query: SelectOfScalar = select(ApiKey).options(selectinload(ApiKey.user)).where(ApiKey.api_key == api_key)
     api_key_object: ApiKey | None = (await session.exec(query)).first()
     if api_key_object is not None:
-        task = asyncio.create_task(update_total_uses(api_key_object.id))
-        task.add_done_callback(update_total_uses_tasks.discard)
-        update_total_uses_tasks.add(task)
+        settings_service = get_settings_service()
+        if not settings_service.settings.disable_track_apikey_usage:
+            task = asyncio.create_task(update_total_uses(api_key_object.id))
+            task.add_done_callback(update_total_uses_tasks.discard)
+            update_total_uses_tasks.add(task)
         return api_key_object.user
     return None
 
