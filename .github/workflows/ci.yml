@@ -60,14 +60,24 @@ jobs:
             const today = new Date();
             today.setHours(0, 0, 0, 0); // Set to beginning of day
 
-            const { data: runs } = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: workflow_name,
-              created: `>=${today.toISOString()}`,
-              per_page: 100, // Get more runs to check
-              status: 'completed'
-            });
+            let runs;
+            try {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflow_name,
+                created: `>=${today.toISOString()}`,
+                per_page: 100, // Get more runs to check
+                status: 'completed'
+              });
+              runs = response.data;
+            } catch (error) {
+              if (error.status === 404) {
+                console.log('Nightly workflow is unavailable on the default branch; proceeding with PR CI');
+                return core.setOutput('success', 'true');
+              }
+              throw error;
+            }
 
             if (runs.workflow_runs.length === 0) {
               console.log('No completed workflow runs found today');
